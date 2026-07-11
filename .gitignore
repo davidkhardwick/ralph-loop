@@ -1,0 +1,19 @@
+# Ralph per-iteration logs
+logs/
+.ralph-done
+
+# Node
+node_modules/
+dist/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local (machine-specific) settings
+.claude/settings.local.json
