@@ -37,26 +37,50 @@ The files fall into three very different buckets:
 | `spec.md` + `implementation_plan.md` | ❌ Per-project | These *are* the project — the source of truth for what you're building. You're not copying them, you **generate fresh ones during planning** every time. That's the actual Ralph workflow. |
 
 So the "copying" worry really only applies to the script — and the fix is to stop
-treating it like a project file and treat it like a CLI tool:
+treating it like a project file and treat it like a CLI tool.
+
+### One-time setup (do this once, ever)
 
 ```bash
-# 1. Install the tools once (symlinks back to this repo so `git pull` updates them):
-./install.sh                 # adds `ralph` + `ralph-init` to ~/.local/bin,
-                             # and installs the /ralph-init Claude Code command
-                             # (use ./install.sh --copy for standalone copies)
+# 1. Clone this repo to a PERMANENT location — the installer symlinks back to it,
+#    so this folder needs to stay put (see caveats below).
+git clone https://github.com/davidkhardwick/ralph-loop.git ~/tools/ralph-loop
 
-# 2. In ANY new project, scaffold the per-project files:
+# 2. From INSIDE the clone, run the installer:
+cd ~/tools/ralph-loop
+./install.sh
+#    → adds `ralph` + `ralph-init` to ~/.local/bin and installs the /ralph-init
+#      Claude Code command. If it warns that ~/.local/bin isn't on your PATH,
+#      follow the one-line fix it prints, then open a new shell.
+#      Prefer standalone copies you can delete the clone after? use: ./install.sh --copy
+```
+
+### Per-project (repeat forever)
+
+```bash
+# 3. In ANY project, scaffold the per-project files:
 cd ~/my-new-project
-ralph-init                   # drops blank prompt.md / spec.md / implementation_plan.md
-#   ...or, inside Claude Code, run:  /ralph-init a CLI todo app in Rust
-#   which interviews you (bidirectional planning) and writes a tailored spec + plan.
+ralph-init                   # plain terminal: blank prompt.md / spec.md / implementation_plan.md
+#   ...or, inside a Claude Code session:
+#   /ralph-init a CLI todo app in Rust
+#     → Claude interviews you (bidirectional planning) and writes a tailored spec + plan.
 
-# 3. Fill in / sign off on the spec and plan, then run the loop:
+# 4. Read & sign off on spec.md + implementation_plan.md, then run the loop:
 ralph
 ```
 
 That's it — the interesting work (spec + plan) is always new, and the boring part
 (the loop) is installed once and never copied.
+
+**Three things to know before you start:**
+- **`claude` (the Claude Code CLI) must be on your PATH.** The loop shells out to
+  it and refuses to start without it. Check with `claude --version`.
+- **Don't move or delete the clone.** The default install symlinks back to it, so
+  removing it breaks `ralph`. Use `./install.sh --copy` if you want a standalone
+  install that survives deleting the clone (trade-off: `git pull` won't auto-update).
+- **`/ralph-init` appears when a Claude Code session starts.** If you installed
+  during an open session, start a fresh one. The plain `ralph-init` (no slash)
+  works in any terminal immediately.
 
 ## The core idea (in one picture)
 
@@ -74,7 +98,10 @@ and exits. Because each task is small, the context stays well under ~100k tokens
 compacts. Contrast with vibe-coding, where one long session drifts into that zone
 and compaction summaries start poisoning the model.
 
-## Quick start
+## Try the demo (in this repo)
+
+This repo is a ready-to-run example. Run it in place with `./ralph.sh` (no install
+needed) to watch the loop build the Budget Tracker:
 
 ```bash
 # 1. Requires the Claude Code CLI on your PATH:
@@ -88,11 +115,12 @@ claude --version
 #    checkboxes. Repeat until the spec is bulletproof — THEN walk away.
 ```
 
-`ralph.sh` exits on its own when `implementation_plan.md` has zero `- [ ]` left.
+`./ralph.sh` exits on its own when `implementation_plan.md` has zero `- [ ]` left.
 
-> This directory is a ready-to-run demo. To use Ralph on your own project, either
-> edit `spec.md` / `implementation_plan.md` here, or copy the four files
-> (`ralph.sh`, `prompt.md`, `spec.md`, `implementation_plan.md`) into that repo.
+> Here it's `./ralph.sh` because you're inside the repo. To use Ralph on your **own**
+> projects, don't copy these files — install once (see
+> [Do I copy these files into every project?](#do-i-copy-these-files-into-every-project-no))
+> and use `ralph-init` + `ralph` from anywhere.
 
 ## The workflow: watch → edit → restart
 
