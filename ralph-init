@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+#
+# ralph-init — scaffold a new Ralph Wiggum loop project in the CURRENT directory.
+#
+# Drops template prompt.md, spec.md, and implementation_plan.md (it never
+# overwrites an existing file unless you pass --force), and adds Ralph's log
+# files to .gitignore. The loop script itself (`ralph`) is NOT copied here — it's
+# a tool you install once with install.sh and run from any project.
+#
+# Usage:
+#   ralph-init            # scaffold templates (skips files that already exist)
+#   ralph-init --force    # overwrite existing template files
+#
+# Prefer having Claude write a tailored spec for you? In Claude Code, run the
+# /ralph-init slash command instead — it interviews you and writes the files.
+
+set -euo pipefail
+
+force=0
+[ "${1:-}" = "--force" ] && force=1
+
+scaffold() {  # scaffold <path>   (file body comes from stdin/heredoc)
+  local path="$1"
+  if [ -e "$path" ] && [ "$force" -ne 1 ]; then
+    printf '  skip    %s (exists — use --force to overwrite)\n' "$path"
+    cat >/dev/null   # drain the heredoc so it isn't left on stdin
+    return
+  fi
+  cat > "$path"
+  printf '  create  %s\n' "$path"
+}
+
+echo "Scaffolding a Ralph loop in: $(pwd)"
+
+scaffold prompt.md <<'EOF'
+# Ralph — per-iteration prompt
+
+You are ONE iteration of an autonomous build loop. You have a FRESH context: the
+only reliable memory of this project lives in `spec.md`, `implementation_plan.md`,
+and the repository itself. Those files are the source of truth, not your context.
+
+Do exactly one task, well, then exit.
+
+## Steps
+1. Study `spec.md` thoroughly. It is the source of truth for WHAT to build and why.
+2. Study `implementation_plan.md` thoroughly. It lists the tasks and their state.
+3. Pick the single highest-leverage UNCHECKED task (`- [ ]`). Do ONLY that one.
+4. Complete the task, following the repository's existing structure and conventions.
+5. Write an unbiased unit test that would genuinely fail if the task were done
+   wrong — not one written to pass. Run it.
+
+## Marking completion
+- Only if the test passes: change that task's `- [ ]` to `- [x]` in
+  `implementation_plan.md`. Add a one-line note beneath it if the next iteration
+  needs to know something non-obvious.
+- If the spec is ambiguous or contradictory, DO NOT guess — a wrong guess poisons
+  every future loop. Record the decision in `spec.md` (or add a `> BLOCKED: ...`
+  note under the task) and stop.
+- Do NOT start a second task. One task per iteration keeps context small and well
+  under the "dumb zone" (~100k tokens), where quality falls off a cliff.
+
+## Repository context & conventions
+<!-- TODO: fill this in for THIS project so a fresh context gets up to speed fast. -->
+- Language / runtime:
+- Test framework:
+- Where source lives and how it's organized:
+- Conventions the agent must follow (naming, error handling, formatting):
+- Anything it must NOT do (add deps, touch certain dirs, etc.):
+
+Now begin: study the specs, pick the highest-leverage unchecked task, and implement it.
+EOF
+
+scaffold spec.md <<'EOF'
+# Feature: <name>
+
+> Read every line and sign off on every line. If the plan isn't bulletproof,
+> errors cascade and amplify across loops.
+
+## Problem
+<!-- What can't the user do today? Be concrete. -->
+
+## Goal
+<!-- One or two sentences: what does "done" look like? -->
+
+## Requirements
+- <!-- concrete, testable requirement -->
+- <!-- concrete, testable requirement -->
+
+## Out of scope (v1)
+- <!-- explicitly excluded, so no iteration wanders into it -->
+
+## Key decisions & constraints
+<!-- Kill implicit assumptions here BEFORE the loop runs. Every ambiguity you
+     resolve now (data model, relationships, formats) is a bug that never happens. -->
+- Language / runtime / test framework:
+- Data model & key relationships:
+- <!-- resolved ambiguity, e.g. "accounts are flat, not nested" -->
+
+## Acceptance criteria
+- <!-- how we'll know each piece works -->
+EOF
+
+scaffold implementation_plan.md <<'EOF'
+# Implementation Plan
+
+Write one checkbox line per task below — each unchecked box is exactly one Ralph
+iteration. Keep tasks small so a single fresh context can finish one without
+approaching the "dumb zone" (~100k tokens), and make each independently testable.
+An iteration marks a task done by turning `- [ ]` into `- [x]`, and only after its
+unit test passes. `ralph` stops automatically when no unchecked boxes remain — so
+this empty plan is a safe no-op that just tells you to add tasks.
+
+Format is a dash, a space, then an empty checkbox. Replace the examples below with
+your own (the "e.g." prefix keeps them from counting as real tasks until you do):
+  e.g.  - [ ] Create the data models
+  e.g.  - [ ] Build the import parser
+
+
+## Notes for future iterations
+_(Ralph appends anything the next pass must know here.)_
+EOF
+
+# Make sure Ralph's runtime artifacts are ignored.
+touch .gitignore
+for entry in "logs/" ".ralph-done"; do
+  grep -qxF "$entry" .gitignore 2>/dev/null || printf '%s\n' "$entry" >> .gitignore
+done
+echo "  update  .gitignore (logs/, .ralph-done)"
+
+cat <<'EOF'
+
+Next:
+  1. Fill in spec.md and implementation_plan.md
+       (or run /ralph-init in Claude Code to have Claude interview you and write them).
+  2. Edit prompt.md's "Repository context & conventions" for this project.
+  3. Read every line and sign off.
+  4. Start the loop:   ralph        (or ./ralph.sh if not installed globally)
+EOF

@@ -14,12 +14,49 @@ loop you can actually leave running.
 
 | File | What it is |
 |------|-----------|
-| `ralph-minimal.sh` | The canonical loop, exactly as in the video. For understanding. |
 | `ralph.sh` | Hardened loop: stop condition, caps, stall detection, logging. For using. |
+| `ralph-minimal.sh` | The canonical loop, exactly as in the video. For understanding. |
+| `install.sh` | Installs `ralph` + `ralph-init` + the `/ralph-init` command once, so you never copy them again. |
+| `ralph-init` | Scaffolds `prompt.md` / `spec.md` / `implementation_plan.md` templates into a new project. |
+| `.claude/commands/ralph-init.md` | The `/ralph-init` Claude Code slash command — interviews you and writes the spec/plan. |
 | `prompt.md` | The per-iteration prompt (the 5 steps + repo conventions). |
 | `spec.md` | **What** to build and why — the source of truth for intent. |
 | `implementation_plan.md` | Checkbox task list — the source of truth for progress. |
 | `logs/` | One log per iteration (git-ignored, created on first run). |
+
+## Do I copy these files into every project? (No)
+
+Short answer: **no — not the way you might picture it.** You never copy the
+*script*, and the files you do create per project are ones you'd be writing anyway.
+The files fall into three very different buckets:
+
+| File | Reusable? | Reality |
+|------|-----------|---------|
+| `ralph.sh` / `ralph-init` | ✅ Fully generic | They're **tools**. Install once; never copy. `ralph` reads `prompt.md`/`spec.md`/`plan` from whatever directory you run it in. |
+| `prompt.md` | 🟡 Template | The 5-step skeleton is reusable; only the "repo conventions" block changes per project. |
+| `spec.md` + `implementation_plan.md` | ❌ Per-project | These *are* the project — the source of truth for what you're building. You're not copying them, you **generate fresh ones during planning** every time. That's the actual Ralph workflow. |
+
+So the "copying" worry really only applies to the script — and the fix is to stop
+treating it like a project file and treat it like a CLI tool:
+
+```bash
+# 1. Install the tools once (symlinks back to this repo so `git pull` updates them):
+./install.sh                 # adds `ralph` + `ralph-init` to ~/.local/bin,
+                             # and installs the /ralph-init Claude Code command
+                             # (use ./install.sh --copy for standalone copies)
+
+# 2. In ANY new project, scaffold the per-project files:
+cd ~/my-new-project
+ralph-init                   # drops blank prompt.md / spec.md / implementation_plan.md
+#   ...or, inside Claude Code, run:  /ralph-init a CLI todo app in Rust
+#   which interviews you (bidirectional planning) and writes a tailored spec + plan.
+
+# 3. Fill in / sign off on the spec and plan, then run the loop:
+ralph
+```
+
+That's it — the interesting work (spec + plan) is always new, and the boring part
+(the loop) is installed once and never copied.
 
 ## The core idea (in one picture)
 
