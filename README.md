@@ -149,5 +149,14 @@ RALPH_MODEL=sonnet RALPH_MAX_ITERS=15 RALPH_TIME_LIMIT=3600 ./ralph.sh
 
 ## Credits
 
-Technique: the "Ralph Wiggum" loop (Geoffrey Huntley). This kit distills the
-Agentic Lab explainer video, its comments, and the accompanying diagrams.
+- **Technique:** the "Ralph Wiggum" loop, coined by **Geoffrey Huntley**.
+- **Explainer:** this kit distills the video **"You're Using Ralph Wiggum Loops
+  WRONG"** by **Agentic Lab** — including its diagrams and comment-thread gotchas.
+  Geoffrey Huntley endorsed that video as the official explainer of the technique.
+
+All credit for the concept and the teaching goes to them; this repo is just a
+runnable starter kit built from their explanation.
+
+## License
+
+[MIT](./LICENSE) © 2026 David Hardwick
