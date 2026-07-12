@@ -159,7 +159,42 @@ seatbelts, not a substitute for a sandbox.
 
 ## Configuration
 
-All via environment variables (defaults in parentheses):
+All settings are environment variables passed to the **`ralph` loop command in your
+terminal** (defaults in parentheses).
+
+### Where do these go? (`/ralph-init` vs `ralph`)
+
+These two are different tools in different places — and the variables only apply to
+the second one:
+
+| | Where it runs | What it does | `RALPH_*` vars? |
+|---|---|---|---|
+| **`/ralph-init`** | *inside* a Claude Code session | Planning only — writes `spec.md` / `implementation_plan.md` / `prompt.md` | **No** — it ignores them. |
+| **`ralph`** | your **terminal / shell** | Runs the actual loop (`claude --print` per pass) | **Yes** — set them here. |
+
+So you don't pass env vars to `/ralph-init`. You plan with it, leave Claude Code,
+then set the variables when you launch the loop from your shell:
+
+```bash
+# Inline, for one run:
+RALPH_MODEL=sonnet ralph
+
+# Or export them for the whole shell session:
+export RALPH_MODEL=sonnet
+export RALPH_MAX_ITERS=20
+ralph
+```
+
+**`RALPH_MODEL` only sets the *loop's* model — not the planner's.** Which model
+`/ralph-init` plans with is just your Claude Code session's model (change it with
+`/model`). So the classic "plan with Opus, loop with Sonnet" split is:
+
+```bash
+# In Claude Code:   /model opus     then   /ralph-init <your idea>
+# In your terminal: RALPH_MODEL=sonnet ralph
+```
+
+### Variables
 
 | Var | Default | Meaning |
 |-----|---------|---------|
@@ -173,9 +208,15 @@ All via environment variables (defaults in parentheses):
 | `RALPH_LOG_DIR` | `logs` | Per-iteration log directory. |
 
 ```bash
-# Cheaper exploration run with tight caps:
+# Cheaper exploration run with tight caps (installed globally):
+RALPH_MODEL=sonnet RALPH_MAX_ITERS=15 RALPH_TIME_LIMIT=3600 ralph
+
+# Same thing from inside this repo, before installing:
 RALPH_MODEL=sonnet RALPH_MAX_ITERS=15 RALPH_TIME_LIMIT=3600 ./ralph.sh
 ```
+
+> Prefer per-project settings that stick, instead of retyping them each run?
+> `export` them in your shell, or ask for the optional `ralph.env` auto-load feature.
 
 ## Stop conditions & guardrails (built in)
 
