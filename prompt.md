@@ -13,7 +13,10 @@ Do exactly one task, well, then exit.
 3. Pick the single highest-leverage UNCHECKED task (`- [ ]`). Do ONLY that one.
 4. Complete the task, following the repository's existing structure and conventions.
 5. Write an unbiased unit test that would genuinely fail if the task were done
-   wrong — not a test written to pass. Run it.
+   wrong — not a test written to pass. Run it. For fast feedback, iterate against
+   the NARROWEST test scope you have (a single file / package / module — usually
+   seconds); only once that's green, run the full/slow suite ONCE as the final gate
+   before marking the task done. Don't pay the whole-suite cost on every red pass.
 
 ## Marking completion
 - Only if the test passes: edit `implementation_plan.md` and change that task's
