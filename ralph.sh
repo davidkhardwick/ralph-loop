@@ -10,7 +10,10 @@
 #   • Max-iteration cap and optional wall-clock cap so it can't run away.
 #   • Stall detection: aborts if no task gets checked off for N passes in a row
 #     (a bad test or a wrong turn can otherwise burn tokens forever).
-#   • Per-iteration logging to ./logs, streamed to your terminal too.
+#   • Optional full-suite circuit breaker: every Nth completed task (RALPH_FULL_TEST_EVERY),
+#     runs RALPH_FULL_TEST_CMD and STOPS the loop if it fails, so a regression can't cascade.
+#   • Live, prettified streaming to your terminal (claude stream-json → jq); the raw
+#     per-iteration stream is also saved to ./logs.
 #   • Long-form, self-documenting flags. Configurable entirely via env vars.
 #
 # Usage:   ./ralph.sh
@@ -34,6 +37,11 @@ RALPH_SLEEP="${RALPH_SLEEP:-2}"                           # seconds between pass
 RALPH_TIME_LIMIT="${RALPH_TIME_LIMIT:-0}"                 # wall-clock seconds; 0 = disabled
 RALPH_YOLO="${RALPH_YOLO:-0}"                             # 1 = --dangerously-skip-permissions (unattended, sandbox only)
 RALPH_LOG_DIR="${RALPH_LOG_DIR:-logs}"                    # where per-iteration logs go
+RALPH_FULL_TEST_CMD="${RALPH_FULL_TEST_CMD:-}"           # every Nth completed task, run this full suite; loop EXITS if it fails. "" = skip
+RALPH_FULL_TEST_EVERY="${RALPH_FULL_TEST_EVERY:-1}"      # run RALPH_FULL_TEST_CMD every Nth completed task (and always the last). 1 = every task
+# normalize RALPH_FULL_TEST_EVERY to a positive integer (guards the modulo below)
+case "$RALPH_FULL_TEST_EVERY" in *[!0-9]*|'') RALPH_FULL_TEST_EVERY=1;; esac
+[ "$RALPH_FULL_TEST_EVERY" -ge 1 ] 2>/dev/null || RALPH_FULL_TEST_EVERY=1
 
 # ---- Pretty printing -------------------------------------------------------
 if [ -t 1 ]; then
@@ -77,6 +85,25 @@ fi
 model_flags=()
 [ -n "$RALPH_MODEL" ] && model_flags=(--model "$RALPH_MODEL")
 
+# ---- Terminal formatter ----------------------------------------------------
+# The loop runs `claude --print --output-format stream-json`, which emits JSONL
+# events in real time. `pretty` renders that as a readable live feed (assistant
+# text, tool calls, iteration banners). Falls back to raw passthrough without jq.
+if command -v jq >/dev/null 2>&1; then
+  pretty() {
+    jq -rR --unbuffered 'fromjson? // empty
+      | if .type=="assistant" then (.message.content[]?
+          | if .type=="text" then .text
+            elif .type=="tool_use" then "  🔧 " + .name + " " + ((.input.file_path // .input.command // .input.pattern // .input.description // "") | tostring | .[0:80])
+            else empty end)
+        elif .type=="result" then "\n═══ iteration " + (.subtype // "?") + " ═══"
+        else empty end'
+  }
+else
+  warn "jq not found — terminal shows raw stream-json. For a readable live feed: 'brew install jq' (macOS) or 'apt-get install jq' (Linux)."
+  pretty() { cat; }
+fi
+
 # ---- Graceful interrupt: print the watch → edit → restart playbook ---------
 on_int() {
   printf '\n'
@@ -92,6 +119,7 @@ trap on_int INT TERM
 start_ts=$(date +%s)
 iter=0
 stall=0
+completed=0
 prev_unchecked=$(count_unchecked)
 
 say "${c_bold}Starting Ralph loop${c_reset}"
@@ -127,10 +155,11 @@ while true; do
   say "${c_bold}Iteration ${iter}${c_reset} — ${remaining} task(s) remaining  ${c_dim}→ ${log}${c_reset}"
 
   # THE loop body. A brand-new `claude --print` process reads prompt.md from stdin,
-  # giving it a fresh context every pass. Equivalent to the video's
-  # `cat prompt.md | claude -p`, plus flags for unattended runs and a tee'd log.
+  # giving it a fresh context every pass (the video's `cat prompt.md | claude -p`).
+  # --output-format stream-json streams events live: the raw stream is tee'd to $log,
+  # and `pretty` renders a readable feed to your terminal.
   set +e
-  claude --print ${model_flags[@]+"${model_flags[@]}"} "${perm_flags[@]}" < "$RALPH_PROMPT" 2>&1 | tee "$log"
+  claude --print --verbose --output-format stream-json ${model_flags[@]+"${model_flags[@]}"} "${perm_flags[@]}" < "$RALPH_PROMPT" 2>&1 | tee "$log" | pretty
   rc=${PIPESTATUS[0]}
   set -e
   [ "$rc" -ne 0 ] && warn "claude exited non-zero (${rc}) on iteration ${iter} — see ${log}"
@@ -139,11 +168,36 @@ while true; do
   now_unchecked=$(count_unchecked)
   if [ "$now_unchecked" -lt "$prev_unchecked" ]; then
     stall=0
+    progressed=1
   else
     stall=$(( stall + 1 ))
+    progressed=0
     warn "No task checked off this pass (${stall}/${RALPH_STALL_LIMIT} stalled)."
   fi
   prev_unchecked=$now_unchecked
+
+  # --- circuit breaker: every Nth completed task, verify the FULL suite is green ---
+  # A red suite means a checked task left (or introduced) a regression; stop before it
+  # cascades. Opt-in via RALPH_FULL_TEST_CMD; frequency via RALPH_FULL_TEST_EVERY (and
+  # always on the final task). Streamed via tee (not `tail`, which buffers and looks
+  # frozen); give it the REAL command, not a shell alias like `p` (runs non-interactively).
+  if [ "$progressed" = "1" ] && [ -n "$RALPH_FULL_TEST_CMD" ]; then
+    completed=$(( completed + 1 ))
+    if [ "$now_unchecked" -eq 0 ] || [ $(( completed % RALPH_FULL_TEST_EVERY )) -eq 0 ]; then
+      say "Verifying full suite (completed task ${completed}, every ${RALPH_FULL_TEST_EVERY}): ${c_dim}${RALPH_FULL_TEST_CMD}${c_reset}"
+      set +e
+      eval "$RALPH_FULL_TEST_CMD" 2>&1 | tee -a "$log"
+      test_rc=${PIPESTATUS[0]}
+      set -e
+      if [ "$test_rc" -ne 0 ]; then
+        die "Full test suite FAILED (exit ${test_rc}) after iteration ${iter}. Stopping so the regression does not cascade.
+       Read ${log}, fix the failing tests, then re-run."
+      fi
+      say "${c_grn}Full suite green.${c_reset}"
+    else
+      say "${c_dim}Full-suite check skipped (completed task ${completed}; runs every ${RALPH_FULL_TEST_EVERY}).${c_reset}"
+    fi
+  fi
 
   if [ "$stall" -ge "$RALPH_STALL_LIMIT" ]; then
     die "No progress for ${RALPH_STALL_LIMIT} passes in a row. Stopping to avoid burning tokens.
