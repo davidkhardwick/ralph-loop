@@ -22,7 +22,7 @@ loop you can actually leave running.
 | `prompt.md` | The per-iteration prompt (the 5 steps + repo conventions). |
 | `spec.md` | **What** to build and why — the source of truth for intent. |
 | `implementation_plan.md` | Checkbox task list — the source of truth for progress. |
-| `logs/` | One log per iteration (git-ignored, created on first run). |
+| `logs/` | One raw stream-json log per iteration (git-ignored). The terminal shows a live prettified feed; re-render an old log with `jq`. |
 
 ## Do I copy these files into every project? (No)
 
@@ -104,8 +104,10 @@ This repo is a ready-to-run example. Run it in place with `./ralph.sh` (no insta
 needed) to watch the loop build the Budget Tracker:
 
 ```bash
-# 1. Requires the Claude Code CLI on your PATH:
+# 1. Requires the Claude Code CLI on your PATH (and jq for the readable live
+#    feed — optional; without it you'll see raw stream-json instead):
 claude --version
+jq --version    # optional but recommended
 
 # 2. Watch a few passes, learn the model's behavior:
 ./ralph.sh

@@ -10,7 +10,8 @@
 #   • Max-iteration cap and optional wall-clock cap so it can't run away.
 #   • Stall detection: aborts if no task gets checked off for N passes in a row
 #     (a bad test or a wrong turn can otherwise burn tokens forever).
-#   • Per-iteration logging to ./logs, streamed to your terminal too.
+#   • Live, prettified streaming to your terminal (claude stream-json → jq); the raw
+#     per-iteration stream is also saved to ./logs.
 #   • Long-form, self-documenting flags. Configurable entirely via env vars.
 #
 # Usage:   ./ralph.sh
@@ -77,6 +78,25 @@ fi
 model_flags=()
 [ -n "$RALPH_MODEL" ] && model_flags=(--model "$RALPH_MODEL")
 
+# ---- Terminal formatter ----------------------------------------------------
+# The loop runs `claude --print --output-format stream-json`, which emits JSONL
+# events in real time. `pretty` renders that as a readable live feed (assistant
+# text, tool calls, iteration banners). Falls back to raw passthrough without jq.
+if command -v jq >/dev/null 2>&1; then
+  pretty() {
+    jq -rR --unbuffered 'fromjson? // empty
+      | if .type=="assistant" then (.message.content[]?
+          | if .type=="text" then .text
+            elif .type=="tool_use" then "  🔧 " + .name + " " + ((.input.file_path // .input.command // .input.pattern // .input.description // "") | tostring | .[0:80])
+            else empty end)
+        elif .type=="result" then "\n═══ iteration " + (.subtype // "?") + " ═══"
+        else empty end'
+  }
+else
+  warn "jq not found — terminal shows raw stream-json. For a readable live feed: 'brew install jq' (macOS) or 'apt-get install jq' (Linux)."
+  pretty() { cat; }
+fi
+
 # ---- Graceful interrupt: print the watch → edit → restart playbook ---------
 on_int() {
   printf '\n'
@@ -127,10 +147,11 @@ while true; do
   say "${c_bold}Iteration ${iter}${c_reset} — ${remaining} task(s) remaining  ${c_dim}→ ${log}${c_reset}"
 
   # THE loop body. A brand-new `claude --print` process reads prompt.md from stdin,
-  # giving it a fresh context every pass. Equivalent to the video's
-  # `cat prompt.md | claude -p`, plus flags for unattended runs and a tee'd log.
+  # giving it a fresh context every pass (the video's `cat prompt.md | claude -p`).
+  # --output-format stream-json streams events live: the raw stream is tee'd to $log,
+  # and `pretty` renders a readable feed to your terminal.
   set +e
-  claude --print ${model_flags[@]+"${model_flags[@]}"} "${perm_flags[@]}" < "$RALPH_PROMPT" 2>&1 | tee "$log"
+  claude --print --verbose --output-format stream-json ${model_flags[@]+"${model_flags[@]}"} "${perm_flags[@]}" < "$RALPH_PROMPT" 2>&1 | tee "$log" | pretty
   rc=${PIPESTATUS[0]}
   set -e
   [ "$rc" -ne 0 ] && warn "claude exited non-zero (${rc}) on iteration ${iter} — see ${log}"
