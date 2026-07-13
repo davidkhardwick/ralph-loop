@@ -208,7 +208,8 @@ ralph
 | `RALPH_YOLO` | `0` | `1` → `--dangerously-skip-permissions` (sandbox only). |
 | `RALPH_PROMPT` / `RALPH_PLAN` / `RALPH_SPEC` | `prompt.md` / `implementation_plan.md` / `spec.md` | File names. |
 | `RALPH_LOG_DIR` | `logs` | Per-iteration log directory. |
-| `RALPH_FULL_TEST_CMD` | `""` | After each completed task, run this full suite; the loop **exits** if it fails (a regression shouldn't cascade). Use the real command (e.g. `pnpm test:working`), not a shell alias like `p`. `""` disables. |
+| `RALPH_FULL_TEST_CMD` | `""` | Full suite to run as a circuit breaker; the loop **exits** if it fails (a regression shouldn't cascade). Use the real command (e.g. `pnpm test:working`), not a shell alias like `p`. `""` disables. |
+| `RALPH_FULL_TEST_EVERY` | `1` | Run `RALPH_FULL_TEST_CMD` every Nth completed task (and always on the last). E.g. `3` = every third task, to amortize a slow suite. |
 
 ```bash
 # Cheaper exploration run with tight caps (installed globally):

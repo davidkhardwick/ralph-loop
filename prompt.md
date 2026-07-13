@@ -17,6 +17,8 @@ Do exactly one task, well, then exit.
    the NARROWEST test scope you have (a single file / package / module — usually
    seconds); only once that's green, run the full/slow suite ONCE as the final gate
    before marking the task done. Don't pay the whole-suite cost on every red pass.
+   (If the loop sets a `RALPH_FULL_TEST_CMD` circuit-breaker, the harness runs the
+   full suite for you — do only the scoped tests here.)
 
 ## Marking completion
 - Only if the test passes: edit `implementation_plan.md` and change that task's

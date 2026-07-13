@@ -10,8 +10,8 @@
 #   • Max-iteration cap and optional wall-clock cap so it can't run away.
 #   • Stall detection: aborts if no task gets checked off for N passes in a row
 #     (a bad test or a wrong turn can otherwise burn tokens forever).
-#   • Optional full-suite circuit breaker: after each completed task, runs
-#     RALPH_FULL_TEST_CMD and STOPS the loop if it fails, so a regression can't cascade.
+#   • Optional full-suite circuit breaker: every Nth completed task (RALPH_FULL_TEST_EVERY),
+#     runs RALPH_FULL_TEST_CMD and STOPS the loop if it fails, so a regression can't cascade.
 #   • Live, prettified streaming to your terminal (claude stream-json → jq); the raw
 #     per-iteration stream is also saved to ./logs.
 #   • Long-form, self-documenting flags. Configurable entirely via env vars.
@@ -37,7 +37,11 @@ RALPH_SLEEP="${RALPH_SLEEP:-2}"                           # seconds between pass
 RALPH_TIME_LIMIT="${RALPH_TIME_LIMIT:-0}"                 # wall-clock seconds; 0 = disabled
 RALPH_YOLO="${RALPH_YOLO:-0}"                             # 1 = --dangerously-skip-permissions (unattended, sandbox only)
 RALPH_LOG_DIR="${RALPH_LOG_DIR:-logs}"                    # where per-iteration logs go
-RALPH_FULL_TEST_CMD="${RALPH_FULL_TEST_CMD:-}"           # after each completed task, run this full suite; loop EXITS if it fails. "" = skip
+RALPH_FULL_TEST_CMD="${RALPH_FULL_TEST_CMD:-}"           # every Nth completed task, run this full suite; loop EXITS if it fails. "" = skip
+RALPH_FULL_TEST_EVERY="${RALPH_FULL_TEST_EVERY:-1}"      # run RALPH_FULL_TEST_CMD every Nth completed task (and always the last). 1 = every task
+# normalize RALPH_FULL_TEST_EVERY to a positive integer (guards the modulo below)
+case "$RALPH_FULL_TEST_EVERY" in *[!0-9]*|'') RALPH_FULL_TEST_EVERY=1;; esac
+[ "$RALPH_FULL_TEST_EVERY" -ge 1 ] 2>/dev/null || RALPH_FULL_TEST_EVERY=1
 
 # ---- Pretty printing -------------------------------------------------------
 if [ -t 1 ]; then
@@ -115,6 +119,7 @@ trap on_int INT TERM
 start_ts=$(date +%s)
 iter=0
 stall=0
+completed=0
 prev_unchecked=$(count_unchecked)
 
 say "${c_bold}Starting Ralph loop${c_reset}"
@@ -171,22 +176,27 @@ while true; do
   fi
   prev_unchecked=$now_unchecked
 
-  # --- circuit breaker: after a task completes, verify the FULL suite is green ---
-  # A red suite means the just-checked task left (or introduced) a regression; stop
-  # before it cascades into future passes. Opt-in via RALPH_FULL_TEST_CMD. Streamed
-  # via tee (not piped through `tail`, which would buffer and look frozen); give it the
-  # REAL command, not a shell alias like `p` (this runs non-interactively).
+  # --- circuit breaker: every Nth completed task, verify the FULL suite is green ---
+  # A red suite means a checked task left (or introduced) a regression; stop before it
+  # cascades. Opt-in via RALPH_FULL_TEST_CMD; frequency via RALPH_FULL_TEST_EVERY (and
+  # always on the final task). Streamed via tee (not `tail`, which buffers and looks
+  # frozen); give it the REAL command, not a shell alias like `p` (runs non-interactively).
   if [ "$progressed" = "1" ] && [ -n "$RALPH_FULL_TEST_CMD" ]; then
-    say "Verifying full suite: ${c_dim}${RALPH_FULL_TEST_CMD}${c_reset}"
-    set +e
-    eval "$RALPH_FULL_TEST_CMD" 2>&1 | tee -a "$log"
-    test_rc=${PIPESTATUS[0]}
-    set -e
-    if [ "$test_rc" -ne 0 ]; then
-      die "Full test suite FAILED (exit ${test_rc}) after iteration ${iter}. Stopping so the regression does not cascade.
+    completed=$(( completed + 1 ))
+    if [ "$now_unchecked" -eq 0 ] || [ $(( completed % RALPH_FULL_TEST_EVERY )) -eq 0 ]; then
+      say "Verifying full suite (completed task ${completed}, every ${RALPH_FULL_TEST_EVERY}): ${c_dim}${RALPH_FULL_TEST_CMD}${c_reset}"
+      set +e
+      eval "$RALPH_FULL_TEST_CMD" 2>&1 | tee -a "$log"
+      test_rc=${PIPESTATUS[0]}
+      set -e
+      if [ "$test_rc" -ne 0 ]; then
+        die "Full test suite FAILED (exit ${test_rc}) after iteration ${iter}. Stopping so the regression does not cascade.
        Read ${log}, fix the failing tests, then re-run."
+      fi
+      say "${c_grn}Full suite green.${c_reset}"
+    else
+      say "${c_dim}Full-suite check skipped (completed task ${completed}; runs every ${RALPH_FULL_TEST_EVERY}).${c_reset}"
     fi
-    say "${c_grn}Full suite green.${c_reset}"
   fi
 
   if [ "$stall" -ge "$RALPH_STALL_LIMIT" ]; then
