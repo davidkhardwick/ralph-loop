@@ -30,6 +30,14 @@ Do exactly one task, well, then exit.
 - Do NOT start a second task. One task per iteration keeps context small and well
   under the "dumb zone" (~100k tokens), where quality falls off a cliff.
 
+## Capturing learnings (for human review)
+If this task surfaced something **durable and non-obvious** that a future pass or feature would
+waste time rediscovering — a codebase-wide fact, a resolved ambiguity, a product decision, an
+invariant, or a convention — append ONE entry per learning under the `## Log` section of
+`LEARNINGS.md`, using the format in that file's header. Only genuinely reusable facts; skip routine
+implementation detail, and leave transient next-pass hints in `implementation_plan.md` instead.
+`LEARNINGS.md` is a human review queue, NOT a source of truth — don't read it as authoritative.
+
 ## Repository context & conventions
 - Language: TypeScript, `strict: true`, never `any`. Runtime: Node.js. Tests: Vitest.
 - Source in `src/`, organized BY DOMAIN (e.g. `src/account/`, `src/transaction/`),
