@@ -17,11 +17,12 @@ loop you can actually leave running.
 | `ralph.sh` | Hardened loop: stop condition, caps, stall detection, logging. For using. |
 | `ralph-minimal.sh` | The canonical loop, exactly as in the video. For understanding. |
 | `install.sh` | Installs `ralph` + `ralph-init` + the `/ralph-init` command once, so you never copy them again. |
-| `ralph-init` | Scaffolds `prompt.md` / `spec.md` / `implementation_plan.md` templates into a new project. |
+| `ralph-init` | Scaffolds `prompt.md` / `spec.md` / `implementation_plan.md` / `LEARNINGS.md` templates into a new project. |
 | `.claude/commands/ralph-init.md` | The `/ralph-init` Claude Code slash command — interviews you and writes the spec/plan. |
 | `prompt.md` | The per-iteration prompt (the 5 steps + repo conventions). |
 | `spec.md` | **What** to build and why — the source of truth for intent. |
 | `implementation_plan.md` | Checkbox task list — the source of truth for progress. |
+| `LEARNINGS.md` | Append-only review queue: the loop stages durable learnings (categorized, with a suggested home); you promote the good ones into the docs. |
 | `logs/` | One raw stream-json log per iteration (git-ignored). The terminal shows a live prettified feed; re-render an old log with `jq`. |
 
 ## Do I copy these files into every project? (No)

@@ -59,6 +59,14 @@ Do exactly one task, well, then exit.
 - Do NOT start a second task. One task per iteration keeps context small and well
   under the "dumb zone" (~100k tokens), where quality falls off a cliff.
 
+## Capturing learnings (for human review)
+If this task surfaced something **durable and non-obvious** that a future pass or feature would
+waste time rediscovering — a codebase-wide fact, a resolved ambiguity, a product decision, an
+invariant, or a convention — append ONE entry per learning under the `## Log` section of
+`LEARNINGS.md`, using the format in that file's header. Only genuinely reusable facts; skip routine
+implementation detail, and leave transient next-pass hints in `implementation_plan.md` instead.
+`LEARNINGS.md` is a human review queue, NOT a source of truth — don't read it as authoritative.
+
 ## Repository context & conventions
 <!-- TODO: fill this in for THIS project so a fresh context gets up to speed fast. -->
 - Language / runtime:
@@ -120,6 +128,47 @@ your own (the "e.g." prefix keeps them from counting as real tasks until you do)
 _(Ralph appends anything the next pass must know here.)_
 EOF
 
+scaffold LEARNINGS.md <<'EOF'
+# Learnings — review queue
+
+Append-only capture of **durable, non-obvious** learnings surfaced while building, staged for
+**human review**. This file is NOT a source of truth — `spec.md`, `implementation_plan.md`,
+`prompt.md`, and your repo's `CLAUDE.md` are. Its only job is to queue learnings so a human can
+decide what graduates into those docs.
+
+## How this works
+- Each loop iteration appends an entry below when it discovers something a future pass or feature
+  would waste time rediscovering (see `prompt.md` → "Capturing learnings").
+- **You (human)** review the queue, promote the worthwhile ones into the suggested home, and mark
+  each `promoted` or `rejected` (or delete it). Prune regularly so it stays scannable.
+- Keep entries to genuinely reusable facts — not routine implementation detail.
+
+## Categories → typical home
+| Category | Typical home | Notes |
+| :-- | :-- | :-- |
+| **Codebase-wide fact** | `CLAUDE.md` | Auto-loaded every pass + inherited by future work. |
+| **Resolved ambiguity** | `spec.md` | A gap the spec left open that got settled. Human should ratify. |
+| **Product decision** | `spec.md` | A behaviour or scope call. |
+| **Invariant** | a test/assertion (+ `CLAUDE.md` if broad) | Best captured as enforced code, not just prose. |
+| **Convention / house style** | `prompt.md` or `CLAUDE.md` | How this codebase does a thing. |
+| **Tooling / process** | `prompt.md` or `CLAUDE.md` | A build/test/command quirk. |
+| **Loop-scoped follow-up** | `implementation_plan.md` → Notes | Transient, next-pass hint — put it THERE, not here. |
+
+## Entry format
+Append newest at the bottom of the Log, one block per learning:
+
+    ### <category> — <task id>
+    - **Home:** <CLAUDE.md | spec.md | prompt.md | implementation_plan.md | code/test>
+    - **Learning:** <1–2 lines, specific and actionable>
+    - **Evidence:** <file:line or what surfaced it>     (optional)
+    - **Status:** proposed        <!-- human sets: promoted | rejected -->
+
+---
+
+## Log
+<!-- iterations append entries below this line -->
+EOF
+
 # Make sure Ralph's runtime artifacts are ignored.
 touch .gitignore
 for entry in "logs/" ".ralph-done"; do
@@ -135,4 +184,5 @@ Next:
   2. Edit prompt.md's "Repository context & conventions" for this project.
   3. Read every line and sign off.
   4. Start the loop:   ralph        (or ./ralph.sh if not installed globally)
+  5. As it runs, skim LEARNINGS.md and promote durable learnings into your docs.
 EOF
