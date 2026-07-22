@@ -3,9 +3,10 @@
 # install.sh — install Ralph once so you never copy it into a project again.
 #
 # Puts two commands on your PATH and installs the Claude Code slash command:
-#   • ralph        -> ralph.sh   (the hardened loop)
-#   • ralph-init   -> ralph-init (the project scaffolder)
-#   • /ralph-init  -> ~/.claude/commands/ralph-init.md  (interactive planner)
+#   • ralph         -> ralph.sh   (the hardened loop)
+#   • ralph-init    -> ralph-init (the project scaffolder)
+#   • /ralph-init   -> ~/.claude/commands/ralph-init.md   (interactive planner)
+#   • /ralph-revise -> ~/.claude/commands/ralph-revise.md (non-destructive spec revision)
 #
 # By default it SYMLINKS back to this repo, so `git pull` updates your tools.
 # Pass --copy to install standalone copies instead (repo can then be moved/deleted).
@@ -42,7 +43,8 @@ install_one() {  # install_one <src> <dest>
 echo "Installing Ralph from: $repo_dir  (mode: $mode)"
 install_one "$repo_dir/ralph.sh"                        "$bin_dir/ralph"
 install_one "$repo_dir/ralph-init"                      "$bin_dir/ralph-init"
-install_one "$repo_dir/.claude/commands/ralph-init.md"  "$cmd_dir/ralph-init.md"
+install_one "$repo_dir/.claude/commands/ralph-init.md"    "$cmd_dir/ralph-init.md"
+install_one "$repo_dir/.claude/commands/ralph-revise.md"  "$cmd_dir/ralph-revise.md"
 chmod +x "$bin_dir/ralph" "$bin_dir/ralph-init" 2>/dev/null || true
 
 echo
@@ -62,6 +64,7 @@ cat <<'EOF'
 Done. From ANY project directory:
   ralph-init      scaffold spec.md / implementation_plan.md / prompt.md templates
   /ralph-init     (in Claude Code) have Claude interview you and write those files
+  /ralph-revise   (in Claude Code) revise an existing spec/plan without clobbering it
   ralph           run the loop
 
 To uninstall: rm the symlinks/copies from the two locations printed above.

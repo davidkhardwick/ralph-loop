@@ -16,9 +16,10 @@ loop you can actually leave running.
 |------|-----------|
 | `ralph.sh` | Hardened loop: stop condition, caps, stall detection, logging. For using. |
 | `ralph-minimal.sh` | The canonical loop, exactly as in the video. For understanding. |
-| `install.sh` | Installs `ralph` + `ralph-init` + the `/ralph-init` command once, so you never copy them again. |
+| `install.sh` | Installs `ralph` + `ralph-init` + the `/ralph-init` and `/ralph-revise` commands once, so you never copy them again. |
 | `ralph-init` | Scaffolds `prompt.md` / `spec.md` / `implementation_plan.md` / `LEARNINGS.md` templates into a new project. |
-| `.claude/commands/ralph-init.md` | The `/ralph-init` Claude Code slash command — interviews you and writes the spec/plan. |
+| `.claude/commands/ralph-init.md` | The `/ralph-init` Claude Code slash command — interviews you and writes the spec/plan. Refuses to run in an already-initialized project (use `/ralph-revise`). |
+| `.claude/commands/ralph-revise.md` | The `/ralph-revise` slash command — revises an existing spec/plan with targeted edits instead of regenerating it. Never unchecks completed tasks; hands off with a diff. |
 | `prompt.md` | The per-iteration prompt (the 5 steps + repo conventions). |
 | `spec.md` | **What** to build and why — the source of truth for intent. |
 | `implementation_plan.md` | Checkbox task list — the source of truth for progress. |
@@ -51,7 +52,7 @@ git clone https://github.com/davidkhardwick/ralph-loop.git ~/tools/ralph-loop
 cd ~/tools/ralph-loop
 ./install.sh
 #    → adds `ralph` + `ralph-init` to ~/.local/bin and installs the /ralph-init
-#      Claude Code command. If it warns that ~/.local/bin isn't on your PATH,
+#      and /ralph-revise Claude Code commands. If it warns that ~/.local/bin isn't on your PATH,
 #      follow the one-line fix it prints, then open a new shell.
 #      Prefer standalone copies you can delete the clone after? use: ./install.sh --copy
 ```
@@ -68,6 +69,10 @@ ralph-init                   # plain terminal: blank prompt.md / spec.md / imple
 
 # 4. Read & sign off on spec.md + implementation_plan.md, then run the loop:
 ralph
+
+# Need to change the spec/plan after they exist? Don't re-run /ralph-init —
+#   /ralph-revise tighten the acceptance criteria for the export feature
+#     → targeted edits only; completed tasks and past decisions are preserved.
 ```
 
 That's it — the interesting work (spec + plan) is always new, and the boring part
@@ -79,9 +84,9 @@ That's it — the interesting work (spec + plan) is always new, and the boring p
 - **Don't move or delete the clone.** The default install symlinks back to it, so
   removing it breaks `ralph`. Use `./install.sh --copy` if you want a standalone
   install that survives deleting the clone (trade-off: `git pull` won't auto-update).
-- **`/ralph-init` appears when a Claude Code session starts.** If you installed
-  during an open session, start a fresh one. The plain `ralph-init` (no slash)
-  works in any terminal immediately.
+- **`/ralph-init` and `/ralph-revise` appear when a Claude Code session starts.**
+  If you installed during an open session, start a fresh one. The plain
+  `ralph-init` (no slash) works in any terminal immediately.
 
 ## The core idea (in one picture)
 
