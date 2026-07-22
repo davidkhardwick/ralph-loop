@@ -9,6 +9,13 @@ write application code and do NOT run the loop. Produce a bulletproof spec and p
 
 Seed idea from the user (may be empty): $ARGUMENTS
 
+## Step 0 — Refuse to clobber an existing project
+If spec.md or implementation_plan.md already exists in the current directory,
+STOP before interviewing or writing anything. This project is already
+initialized: tell the user to run /ralph-revise to change it. Only proceed with
+a from-scratch re-plan if the user explicitly confirms that is what they want —
+and take timestamped backup copies of the existing files first.
+
 ## Step 1 — Bidirectional planning (this is the whole point)
 Interview the user to remove implicit assumptions before any code is written. Ask
 pointed questions — and surface the assumptions YOU are making that would have
