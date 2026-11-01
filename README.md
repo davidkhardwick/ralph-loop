@@ -216,6 +216,9 @@ ralph
 | `RALPH_LOG_DIR` | `logs` | Per-iteration log directory. |
 | `RALPH_FULL_TEST_CMD` | `""` | Full suite to run as a circuit breaker; the loop **exits** if it fails (a regression shouldn't cascade). Use the real command (e.g. `pnpm test:working`), not a shell alias like `p`. `""` disables. |
 | `RALPH_FULL_TEST_EVERY` | `1` | Run `RALPH_FULL_TEST_CMD` every Nth completed task (and always on the last). E.g. `3` = every third task, to amortize a slow suite. |
+| `RALPH_DONE_CMD` | `""` | Extra gate when every box is ticked: the loop counts as done only if this command passes, and stops with an error if it fails (e.g. a spec checker that also needs open questions answered). `""` disables. |
+| `RALPH_ALLOWED_TOOLS` | `""` | Comma-separated `--allowedTools` list added to `acceptEdits`, e.g. `Read,Edit,Bash(node:*)`. Lets an unattended run use exactly those tools without `RALPH_YOLO`. Ignored under YOLO. |
+| `RALPH_EXTRA_ARGS` | `""` | Extra `claude` CLI arguments, word-split, e.g. `--add-dir ../other-repo`. |
 
 ```bash
 # Cheaper exploration run with tight caps (installed globally):
@@ -233,7 +236,8 @@ RALPH_MODEL=sonnet RALPH_MAX_ITERS=15 RALPH_TIME_LIMIT=3600 ./ralph.sh
 - **Done:** zero `- [ ]` tasks remain → exit 0.
 - **Max iterations:** `RALPH_MAX_ITERS` reached → stop.
 - **Time limit:** `RALPH_TIME_LIMIT` reached → stop.
-- **Stall:** no task checked off for `RALPH_STALL_LIMIT` passes → abort (this is
+- **Done gate:** with `RALPH_DONE_CMD` set, zero `- [ ]` only counts as done if it passes; otherwise the loop stops with an error.
+- **Stall:** no task checked off for `RALPH_STALL_LIMIT` passes → abort. Progress means the number of `- [x]` went up, so a pass that ticks its box and adds new tasks (a review pass) is not a stall (this is
   your defense against a bad test or wrong turn poisoning every future loop).
 - **Ctrl+C:** prints the watch → edit → restart playbook and exits cleanly.
 
