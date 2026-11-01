@@ -9,7 +9,11 @@
 #   • Stops when implementation_plan.md has zero unchecked "- [ ]" tasks.
 #   • Max-iteration cap and optional wall-clock cap so it can't run away.
 #   • Stall detection: aborts if no task gets checked off for N passes in a row
-#     (a bad test or a wrong turn can otherwise burn tokens forever).
+#     (a bad test or a wrong turn can otherwise burn tokens forever). Progress is a box
+#     ticked, so a pass that also ADDS tasks (e.g. a review pass) still counts.
+#   • Optional done gate (RALPH_DONE_CMD): an all-checked plan is only "done" when it passes.
+#   • Optional tool allowlist (RALPH_ALLOWED_TOOLS) as a middle ground between
+#     acceptEdits and YOLO, plus RALPH_EXTRA_ARGS for anything else the CLI takes.
 #   • Optional full-suite circuit breaker: every Nth completed task (RALPH_FULL_TEST_EVERY),
 #     runs RALPH_FULL_TEST_CMD and STOPS the loop if it fails, so a regression can't cascade.
 #   • Live, prettified streaming to your terminal (claude stream-json → jq); the raw
@@ -39,6 +43,9 @@ RALPH_YOLO="${RALPH_YOLO:-0}"                             # 1 = --dangerously-sk
 RALPH_LOG_DIR="${RALPH_LOG_DIR:-logs}"                    # where per-iteration logs go
 RALPH_FULL_TEST_CMD="${RALPH_FULL_TEST_CMD:-}"           # every Nth completed task, run this full suite; loop EXITS if it fails. "" = skip
 RALPH_FULL_TEST_EVERY="${RALPH_FULL_TEST_EVERY:-1}"      # run RALPH_FULL_TEST_CMD every Nth completed task (and always the last). 1 = every task
+RALPH_DONE_CMD="${RALPH_DONE_CMD:-}"                     # must pass before an all-checked plan counts as done; "" = no extra gate
+RALPH_ALLOWED_TOOLS="${RALPH_ALLOWED_TOOLS:-}"           # comma-separated --allowedTools list, e.g. "Read,Edit,Bash(node:*)"; ignored under YOLO
+RALPH_EXTRA_ARGS="${RALPH_EXTRA_ARGS:-}"                 # extra claude CLI arguments, word-split (e.g. "--add-dir ../other-repo")
 # normalize RALPH_FULL_TEST_EVERY to a positive integer (guards the modulo below)
 case "$RALPH_FULL_TEST_EVERY" in *[!0-9]*|'') RALPH_FULL_TEST_EVERY=1;; esac
 [ "$RALPH_FULL_TEST_EVERY" -ge 1 ] 2>/dev/null || RALPH_FULL_TEST_EVERY=1
@@ -55,6 +62,13 @@ warn() { printf '%s\n' "${c_yel}[ralph] WARN:${c_reset} $*" >&2; }
 die()  { printf '%s\n' "${c_red}[ralph] ERROR:${c_reset} $*" >&2; exit 1; }
 
 # ---- Count unchecked "- [ ]" tasks in the plan -----------------------------
+# ---- Count checked "- [x]" tasks: progress is a box ticked, even when a pass also adds tasks.
+count_checked() {
+  local n
+  n=$(grep -cE '^[[:space:]]*- \[[xX]\]' "$RALPH_PLAN" 2>/dev/null || true)
+  printf '%s' "${n:-0}"
+}
+
 count_unchecked() {
   local n
   n=$(grep -cE '^[[:space:]]*- \[ \]' "$RALPH_PLAN" 2>/dev/null || true)
@@ -78,12 +92,28 @@ if [ "$RALPH_YOLO" = "1" ]; then
   warn "YOLO: --dangerously-skip-permissions is ON. Run ONLY in a sandbox / disposable env."
 else
   perm_flags=(--permission-mode acceptEdits)
+  if [ -n "$RALPH_ALLOWED_TOOLS" ]; then
+    IFS=',' read -r -a allowed_tools <<< "$RALPH_ALLOWED_TOOLS"
+    perm_flags+=(--allowedTools "${allowed_tools[@]}")
+    say "${c_dim}Allowed tools: ${RALPH_ALLOWED_TOOLS}${c_reset}"
+  fi
   say "${c_dim}Permission mode: acceptEdits. Ralph can edit files but will not run shell commands unattended.${c_reset}"
   say "${c_dim}For a fully unattended overnight run (tests, git, etc.), use RALPH_YOLO=1 in a sandbox.${c_reset}"
 fi
 
 model_flags=()
 [ -n "$RALPH_MODEL" ] && model_flags=(--model "$RALPH_MODEL")
+
+extra_flags=()
+# shellcheck disable=SC2206  # word-splitting RALPH_EXTRA_ARGS is the point
+[ -n "$RALPH_EXTRA_ARGS" ] && extra_flags=($RALPH_EXTRA_ARGS)
+
+# ---- Done gate: an all-checked plan is only done when RALPH_DONE_CMD (if set) passes ----
+done_gate_passes() {
+  [ -z "$RALPH_DONE_CMD" ] && return 0
+  say "Done gate: ${c_dim}${RALPH_DONE_CMD}${c_reset}"
+  eval "$RALPH_DONE_CMD"
+}
 
 # ---- Terminal formatter ----------------------------------------------------
 # The loop runs `claude --print --output-format stream-json`, which emits JSONL
@@ -121,12 +151,13 @@ iter=0
 stall=0
 completed=0
 prev_unchecked=$(count_unchecked)
+prev_checked=$(count_checked)
 
 say "${c_bold}Starting Ralph loop${c_reset}"
 say "prompt=${RALPH_PROMPT}  plan=${RALPH_PLAN}  model=${RALPH_MODEL:-<cli default>}  max_iters=${RALPH_MAX_ITERS}"
 say "unchecked tasks at start: ${c_bold}${prev_unchecked}${c_reset}"
 
-if [ "$prev_unchecked" -eq 0 ]; then
+if [ "$prev_unchecked" -eq 0 ] && [ -z "$RALPH_DONE_CMD" ]; then
   say "${c_grn}Nothing to do — no unchecked '- [ ]' tasks in ${RALPH_PLAN}.${c_reset}"
   exit 0
 fi
@@ -135,8 +166,12 @@ while true; do
   # --- stop conditions (checked BEFORE spending another pass) ---
   remaining=$(count_unchecked)
   if [ "$remaining" -eq 0 ]; then
-    say "${c_grn}All tasks complete — 0 unchecked tasks remain. Done after ${iter} iteration(s).${c_reset}"
-    break
+    if done_gate_passes; then
+      say "${c_grn}All tasks complete — 0 unchecked tasks remain. Done after ${iter} iteration(s).${c_reset}"
+      break
+    fi
+    die "Every task is checked but the done gate failed: ${RALPH_DONE_CMD}
+       Nothing left in ${RALPH_PLAN} can fix it; resolve what it reports (e.g. answer open questions), then re-run."
   fi
   if [ "$iter" -ge "$RALPH_MAX_ITERS" ]; then
     warn "Hit max iterations (${RALPH_MAX_ITERS}) with ${remaining} task(s) left. Stopping."
@@ -159,14 +194,15 @@ while true; do
   # --output-format stream-json streams events live: the raw stream is tee'd to $log,
   # and `pretty` renders a readable feed to your terminal.
   set +e
-  claude --print --verbose --output-format stream-json ${model_flags[@]+"${model_flags[@]}"} "${perm_flags[@]}" < "$RALPH_PROMPT" 2>&1 | tee "$log" | pretty
+  claude --print --verbose --output-format stream-json ${model_flags[@]+"${model_flags[@]}"} "${perm_flags[@]}" ${extra_flags[@]+"${extra_flags[@]}"} < "$RALPH_PROMPT" 2>&1 | tee "$log" | pretty
   rc=${PIPESTATUS[0]}
   set -e
   [ "$rc" -ne 0 ] && warn "claude exited non-zero (${rc}) on iteration ${iter} — see ${log}"
 
   # --- stall detection: did a checkbox actually get ticked this pass? ---
   now_unchecked=$(count_unchecked)
-  if [ "$now_unchecked" -lt "$prev_unchecked" ]; then
+  now_checked=$(count_checked)
+  if [ "$now_checked" -gt "$prev_checked" ]; then
     stall=0
     progressed=1
   else
@@ -175,6 +211,7 @@ while true; do
     warn "No task checked off this pass (${stall}/${RALPH_STALL_LIMIT} stalled)."
   fi
   prev_unchecked=$now_unchecked
+  prev_checked=$now_checked
 
   # --- circuit breaker: every Nth completed task, verify the FULL suite is green ---
   # A red suite means a checked task left (or introduced) a regression; stop before it
